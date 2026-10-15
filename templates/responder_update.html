@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responder Incident Update</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <main class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-md-7">
+                <div class="card shadow">
+                    <div class="card-body p-4">
+                        <h2 class="h4 mb-3">{{ sos.dispatch_agency }} Incident Update</h2>
+                        {% if updated %}
+                        <div class="alert alert-success">Update recorded successfully.</div>
+                        {% endif %}
+                        <p class="text-muted">SOS ID: {{ sos.sos_id }}</p>
+                        <form method="POST">
+                            <input type="hidden" name="token" value="{{ request.args.get('token') or request.form.get('token') }}">
+                            <label class="form-label" for="responder_status">Current status</label>
+                            <select id="responder_status" name="responder_status" class="form-select mb-3" required>
+                                <option value="ACKNOWLEDGED">Message received</option>
+                                <option value="ON_THE_WAY">Team on the way</option>
+                                <option value="ARRIVED">Reached incident location</option>
+                                <option value="COMPLETED">Incident handled</option>
+                            </select>
+                            <label class="form-label" for="dispatch_update">Update</label>
+                            <textarea id="dispatch_update" name="dispatch_update" class="form-control mb-3" rows="4" placeholder="Describe the action taken"></textarea>
+                            <button type="submit" class="btn btn-success w-100">Submit Update</button>
+                            <div id="location-status" class="small text-muted mt-3">Live location is not sharing.</div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script>
+        const locationStatus = document.getElementById("location-status");
+        const token = new URLSearchParams(window.location.search).get("token");
+        const sosId = {{ sos.sos_id }};
+
+        function shareLocation(position) {
+            const formData = new URLSearchParams({
+                token: token || "",
+                responder_status: document.getElementById("responder_status").value,
+                dispatch_update: document.getElementById("dispatch_update").value,
+                responder_latitude: position.coords.latitude.toFixed(8),
+                responder_longitude: position.coords.longitude.toFixed(8)
+            });
+
+            fetch(`/responder-update/${sosId}?token=${encodeURIComponent(token || "")}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: formData
+            }).then((response) => {
+                if (response.ok) {
+                    locationStatus.textContent = `Live location shared at ${new Date().toLocaleTimeString()}.`;
+                    locationStatus.className = "small text-success mt-3";
+                }
+            }).catch(() => {
+                locationStatus.textContent = "Location update failed. Check the network.";
+                locationStatus.className = "small text-danger mt-3";
+            });
+        }
+
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition(
+                shareLocation,
+                () => {
+                    locationStatus.textContent = "GPS permission is required for live location sharing.";
+                    locationStatus.className = "small text-warning mt-3";
+                },
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            );
+        } else {
+            locationStatus.textContent = "This device does not support GPS location sharing.";
+        }
+    </script>
+</body>
+</html>

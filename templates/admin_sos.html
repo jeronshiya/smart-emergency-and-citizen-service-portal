@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin SOS Requests</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="bg-dark">
+    <nav class="navbar navbar-dark bg-danger">
+        <div class="container">
+            <a class="navbar-brand fw-bold d-flex align-items-center">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="navbar-logo me-3">
+                <span>SOS Management</span>
+            </a>
+            <a href="/admin-dashboard" class="btn btn-light">Dashboard</a>
+        </div>
+    </nav>
+
+    <main>
+        <div class="container mt-5">
+            <h2 class="mb-4">Emergency SOS Requests</h2>
+
+            <div class="card shadow">
+                <div class="card-body table-responsive">
+                    <table class="table table-bordered table-striped align-middle">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>ID</th>
+                                <th>Citizen</th>
+                                <th>Mobile</th>
+                                <th>Emergency</th>
+                                <th>Location</th>
+                                <th>Evidence</th>
+                                <th>Emergency Date</th>
+                                <th>Call Response</th>
+                                <th>SOS Status</th>
+                                <th>Dispatch</th>
+                                <th class="sos-action-heading">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sos in sos_list %}
+                            <tr>
+                                <td>{{ sos.sos_id }}</td>
+                                <td>{{ sos.full_name }}</td>
+                                <td>{{ sos.mobile }}</td>
+                                <td>{{ sos.emergency_type }}</td>
+                                <td>{{ sos.location }}</td>
+                                <td>
+                                    {% if sos.evidence_photo %}<a href="{{ url_for('static', filename=sos.evidence_photo) }}" target="_blank" rel="noopener">View photo</a>{% endif %}
+                                    {% if sos.evidence_video %}<br><a href="{{ url_for('static', filename=sos.evidence_video) }}" target="_blank" rel="noopener">View video</a>{% endif %}
+                                    {% if not sos.evidence_photo and not sos.evidence_video %}<span class="text-muted">No evidence</span>{% endif %}
+                                </td>
+                                <td>{{ sos.emergency_datetime or "Not provided" }}</td>
+                                <td>
+                                    {% if sos.user_confirmation == 'USER_CONFIRMED' %}
+                                        <span class="badge bg-warning text-dark">USER CONFIRMED</span>
+                                    {% elif sos.user_confirmation == 'USER_DENIED' %}
+                                        <span class="badge bg-danger">USER DENIED</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">NO RESPONSE</span>
+                                    {% endif %}
+                                </td>
+                                <td class="sos-status-cell">
+                                    <span class="sos-status-badge status-{{ (sos.status or 'Pending')|lower }}">{{ sos.status or 'Pending' }}</span>
+                                </td>
+                                <td>
+                                    {% if sos.dispatch_agency %}
+                                        <strong>{{ sos.dispatch_agency }}</strong><br>
+                                        <span class="badge bg-info text-dark">{{ sos.dispatch_status }}</span>
+                                        {% if sos.dispatch_update %}<div class="small mt-2">{{ sos.dispatch_update }}</div>{% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary">NOT FORWARDED</span>
+                                    {% endif %}
+                                </td>
+                                <td class="sos-action-cell">
+                                    <form id="sos-form-{{ sos.sos_id }}" action="/update-sos/{{ sos.sos_id }}" method="POST" class="sos-action-form">
+                                        <section class="sos-action-section">
+                                            <h6>Verification</h6>
+                                            <div class="small mb-2">
+                                                <strong>Automatic risk score:</strong> {{ sos.verification_score or 0 }}/100<br>
+                                                <span class="text-muted">{{ sos.verification_reasons or 'No automatic reason recorded' }}</span>
+                                            </div>
+                                            <select name="verification_method" class="form-select form-select-sm">
+                                                <option value="NOT_VERIFIED" {% if sos.verification_method == 'NOT_VERIFIED' %}selected{% endif %}>Not independently verified</option>
+                                                <option value="ADMIN_CALL" {% if sos.verification_method == 'ADMIN_CALL' %}selected{% endif %}>Admin call confirmed</option>
+                                                <option value="RESPONDER_CONFIRMATION" {% if sos.verification_method == 'RESPONDER_CONFIRMATION' %}selected{% endif %}>Responder confirmed</option>
+                                                <option value="POLICE_CONFIRMATION" {% if sos.verification_method == 'POLICE_CONFIRMATION' %}selected{% endif %}>Police confirmed</option>
+                                                <option value="NO_INCIDENT" {% if sos.verification_method == 'NO_INCIDENT' %}selected{% endif %}>No incident found</option>
+                                            </select>
+                                            {% if sos.gps_latitude and sos.gps_longitude %}
+                                            <a class="btn btn-outline-primary btn-sm w-100" target="_blank" rel="noopener" href="https://www.google.com/maps?q={{ sos.gps_latitude }},{{ sos.gps_longitude }}">View GPS Map</a>
+                                            {% endif %}
+                                            <textarea name="admin_note" class="form-control form-control-sm" rows="2" placeholder="Admin note"></textarea>
+                                            <button type="submit" name="action" value="update" class="btn btn-success btn-sm w-100">Save Verification</button>
+                                        </section>
+                                        <section class="sos-action-section sos-dispatch-section">
+                                            <h6>Dispatch</h6>
+                                            <select name="dispatch_agency" class="form-select form-select-sm">
+                                                <option value="">Forward to...</option>
+                                                <option value="POLICE">Police</option>
+                                                <option value="AMBULANCE">Ambulance</option>
+                                            </select>
+                                            <textarea name="dispatch_message" class="form-control form-control-sm" rows="2" placeholder="Message for police/ambulance"></textarea>
+                                            <button type="submit" name="action" value="dispatch" class="btn btn-primary btn-sm w-100">Forward & Track</button>
+                                        </section>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-dark text-white text-center py-4">
+        <h5>Smart Emergency & Citizen Service Portal</h5>
+        <p>© 2026 All Rights Reserved.</p>
+    </footer>
+</body>
+</html>

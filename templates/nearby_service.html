@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} | Smart Emergency Portal</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        #service-map { height: 560px; border-radius: 12px; }
+        @media (max-width: 991.98px) {
+            #service-map { height: 420px; }
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-primary shadow">
+        <div class="container">
+            
+            <a class="navbar-brand fw-bold" href="/">Smart Emergency</a>
+            <div class="d-flex gap-2">
+                {% if is_authenticated %}
+                <a href="/saved-places" class="btn btn-light">Saved Places</a>
+                {% else %}
+                <a href="/login?next={{ request.path }}" class="btn btn-light">Login to Save</a>
+                {% endif %}
+                <a href="/" class="btn btn-light">Home</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container py-5">
+        <div class="card shadow p-4">
+            <h1 class="text-primary">{{ title }}</h1>
+            <p class="text-muted">Find {{ search_term }} near your current GPS location.</p>
+            <button id="current-location" class="btn btn-danger align-self-start mb-3">Use My Current Location</button>
+            <p id="message" class="text-muted" role="status" aria-live="polite">Use the button to find nearby {{ search_term }}.</p>
+
+            <div class="row g-4">
+                <section class="col-12" aria-labelledby="map-heading">
+                    <div class="border rounded p-3 h-100 bg-white">
+                        <h2 id="map-heading" class="h4">Nearby {{ search_term|title }} Map</h2>
+                        <div id="service-map" aria-label="Map showing nearby facilities"></div>
+                    </div>
+                </section>
+            </div>
+
+            <section class="mt-4" aria-labelledby="results-heading">
+                <h2 id="results-heading" class="h4">All Nearby {{ search_term|title }} (within 10 km)</h2>
+                <div id="results" class="row g-3">
+                    <p class="text-muted mb-0">Nearby {{ search_term }} will appear here after you share your location.</p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const serviceConfig = {
+            facilityName: {{ facility_name|tojson }},
+            searchTerm: {{ search_term|tojson }},
+            overpassFilters: {{ overpass_filters|tojson }},
+            serviceType: {{ ('hospital' if facility_name == 'Hospital' else 'blood_bank')|tojson }},
+            isAuthenticated: {{ is_authenticated|tojson }}
+        };
+        const message = document.getElementById('message');
+        const results = document.getElementById('results');
+        let map;
+        let facilityLayer;
+        let facilityMarkers = new Map();
+        const searchRadiusMeters = 10000;
+        const defaultLocation = { latitude: 13.0827, longitude: 80.2707 };
+        const locationButton = document.getElementById('current-location');
+
+        function showMessage(text, error = false) {
+            message.textContent = text;
+            message.className = error ? 'text-danger' : 'text-muted';
+        }
+
+        function addTextElement(parent, tagName, className, text) {
+            const element = document.createElement(tagName);
+            element.className = className;
+            element.textContent = text;
+            parent.appendChild(element);
+            return element;
+        }
+
+        function showFacilities(items) {
+            results.replaceChildren();
+            if (!items.length) {
+                addTextElement(results, 'p', 'text-muted mb-0', `No ${serviceConfig.searchTerm} found within ${searchRadiusMeters / 1000} km of your location.`);
+                showMessage(`No ${serviceConfig.searchTerm} found near this location.`, true);
+                return;
+            }
+
+            showMessage(`${items.length} ${serviceConfig.searchTerm} found within ${searchRadiusMeters / 1000} km.`);
+            items.forEach((item) => {
+                const cardColumn = document.createElement('div');
+                cardColumn.className = 'col-md-6 col-xl-4';
+                const card = document.createElement('div');
+                card.className = 'border rounded p-3 h-100';
+                addTextElement(card, 'h3', 'h5', item.tags?.name || serviceConfig.facilityName);
+                const address = [
+                    item.tags?.['addr:housenumber'],
+                    item.tags?.['addr:street'],
+                    item.tags?.['addr:place'],
+                    item.tags?.['addr:city']
+                ].filter(Boolean).join(', ') || 'Address not available';
+                addTextElement(card, 'p', 'mb-2 text-muted', `${address} · ${(item.distance / 1000).toFixed(1)} km away`);
+
+                const showOnMap = document.createElement('button');
+                showOnMap.type = 'button';
+                showOnMap.className = 'btn btn-sm btn-outline-primary me-2';
+                showOnMap.textContent = 'Show on map';
+                showOnMap.addEventListener('click', () => {
+                    const marker = facilityMarkers.get(`${item.type}/${item.id}`);
+                    if (marker) {
+                        map.flyTo([item.lat, item.lon], 16);
+                        marker.openPopup();
+                    }
+                });
+                card.appendChild(showOnMap);
+
+                const saveButton = document.createElement('button');
+                saveButton.type = 'button';
+                saveButton.className = 'btn btn-sm btn-outline-success ms-2';
+                saveButton.textContent = 'Save';
+                saveButton.addEventListener('click', async () => {
+                    if (!serviceConfig.isAuthenticated) {
+                        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+                        return;
+                    }
+
+                    saveButton.disabled = true;
+                    try {
+                        const response = await fetch('/api/saved-facilities', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                service_type: serviceConfig.serviceType,
+                                osm_type: item.type,
+                                osm_id: item.id,
+                                name: item.tags?.name || serviceConfig.facilityName,
+                                address,
+                                latitude: item.lat,
+                                longitude: item.lon,
+                                distance_km: item.distance / 1000
+                            })
+                        });
+                        const data = await response.json();
+                        if (response.status === 401) {
+                            window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
+                            return;
+                        }
+                        if (!response.ok) throw new Error(data.error || 'Unable to save this place.');
+                        saveButton.textContent = 'Saved';
+                        showMessage(data.message);
+                    } catch (error) {
+                        console.error('Unable to save nearby place:', error);
+                        showMessage(error.message || 'Unable to save this place. Please try again.', true);
+                        saveButton.disabled = false;
+                    }
+                });
+                card.appendChild(saveButton);
+                cardColumn.appendChild(card);
+                results.appendChild(cardColumn);
+            });
+        }
+
+        function updateMap(latitude, longitude, items) {
+            if (!map) {
+                map = L.map('service-map').setView([latitude, longitude], 14);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+            } else {
+                map.setView([latitude, longitude], 14);
+            }
+            if (facilityLayer) facilityLayer.clearLayers();
+            facilityLayer = L.layerGroup().addTo(map);
+
+            const searchArea = L.circle([latitude, longitude], {
+                radius: searchRadiusMeters,
+                color: '#0d6efd',
+                weight: 2,
+                dashArray: '6 6',
+                fillColor: '#0d6efd',
+                fillOpacity: 0.04
+            }).addTo(facilityLayer);
+            const currentLocation = L.circleMarker([latitude, longitude], {
+                radius: 9,
+                color: '#ffffff',
+                weight: 3,
+                fillColor: '#0d6efd',
+                fillOpacity: 1
+            }).addTo(facilityLayer);
+            currentLocation.bindPopup('Your current location');
+
+            facilityMarkers = new Map();
+            items.forEach((item) => {
+                const marker = L.marker([item.lat, item.lon]).addTo(facilityLayer);
+                const popup = document.createElement('div');
+                addTextElement(popup, 'strong', '', item.tags?.name || serviceConfig.facilityName);
+                addTextElement(popup, 'div', '', `${(item.distance / 1000).toFixed(1)} km away`);
+                marker.bindPopup(popup);
+                facilityMarkers.set(`${item.type}/${item.id}`, marker);
+            });
+            map.fitBounds(searchArea.getBounds(), { padding: [30, 30], maxZoom: 14 });
+        }
+
+        function distanceInMeters(firstLatitude, firstLongitude, secondLatitude, secondLongitude) {
+            const earthRadius = 6371000;
+            const latitudeDelta = (secondLatitude - firstLatitude) * Math.PI / 180;
+            const longitudeDelta = (secondLongitude - firstLongitude) * Math.PI / 180;
+            const value = Math.sin(latitudeDelta / 2) ** 2
+                + Math.cos(firstLatitude * Math.PI / 180) * Math.cos(secondLatitude * Math.PI / 180)
+                * Math.sin(longitudeDelta / 2) ** 2;
+            return earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+        }
+
+        async function findFacilities(latitude, longitude) {
+            showMessage(`Finding nearby ${serviceConfig.searchTerm}...`);
+            results.replaceChildren();
+            updateMap(latitude, longitude, []);
+            const query = `[out:json][timeout:25];(${serviceConfig.overpassFilters.split(';').filter(Boolean).map((filter) => `${filter}(around:${searchRadiusMeters},${latitude},${longitude})`).join(';')};);out center tags;`;
+            try {
+                const servers = [
+                    'https://overpass-api.de/api/interpreter',
+                    'https://overpass.kumi.systems/api/interpreter',
+                    'https://overpass.private.coffee/api/interpreter'
+                ];
+                let data;
+                for (const server of servers) {
+                    try {
+                        const response = await fetch(server, { method: 'POST', body: query });
+                        if (response.ok) {
+                            const serverData = await response.json();
+                            if (serverData.remark) {
+                                console.warn(`Nearby ${serviceConfig.searchTerm} result was incomplete: ${serverData.remark}`);
+                                continue;
+                            }
+                            data = serverData;
+                            break;
+                        }
+                    } catch (serverError) {
+                        console.warn(`Nearby ${serviceConfig.searchTerm} server unavailable: ${server}`, serverError);
+                    }
+                }
+                if (!data) throw new Error(`Nearby ${serviceConfig.searchTerm} services unavailable`);
+
+                const seen = new Set();
+                const items = data.elements.map((item) => {
+                    const itemLatitude = item.lat ?? item.center?.lat;
+                    const itemLongitude = item.lon ?? item.center?.lon;
+                    return {
+                        ...item,
+                        lat: itemLatitude,
+                        lon: itemLongitude,
+                        distance: distanceInMeters(latitude, longitude, itemLatitude, itemLongitude)
+                    };
+                }).filter((item) => {
+                    const key = `${item.type}/${item.id}`;
+                    if (!Number.isFinite(item.lat) || !Number.isFinite(item.lon) || seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                })
+                    .sort((first, second) => first.distance - second.distance);
+
+                updateMap(latitude, longitude, items);
+                showFacilities(items);
+            } catch (error) {
+                console.error(`Unable to load nearby ${serviceConfig.searchTerm}:`, error);
+                showMessage(`Unable to load nearby ${serviceConfig.searchTerm}. Check your internet connection and try again.`, true);
+                addTextElement(results, 'p', 'text-danger mb-0', `The map is centered on your location, but nearby ${serviceConfig.searchTerm} could not be loaded. Check your internet connection and try again.`);
+            }
+        }
+
+        function requestCurrentLocation() {
+            if (!navigator.geolocation) {
+                showMessage('Your browser does not support location access. Showing a default location near Chennai.', true);
+                findFacilities(defaultLocation.latitude, defaultLocation.longitude);
+                return;
+            }
+            showMessage('Requesting your location...');
+            navigator.geolocation.getCurrentPosition(
+                (position) => findFacilities(
+                    position.coords.latitude,
+                    position.coords.longitude
+                ),
+                () => {
+                    showMessage('Location permission was denied. Showing nearby hospitals near Chennai instead.', true);
+                    findFacilities(defaultLocation.latitude, defaultLocation.longitude);
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+            );
+        }
+
+        locationButton.addEventListener('click', requestCurrentLocation);
+        requestCurrentLocation();
+    </script>
+</body>
+</html>

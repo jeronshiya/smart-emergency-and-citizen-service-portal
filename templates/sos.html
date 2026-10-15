@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency SOS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body class="bg-dark" data-ambulance-request="{{ 'true' if ambulance_request else 'false' }}">
+    <nav class="navbar navbar-dark bg-danger">
+        <div class="container">
+            <a class="navbar-brand fw-bold d-flex align-items-center">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="navbar-logo me-3">
+                <span>Emergency SOS</span>
+            </a>
+            <div class="d-flex gap-2">
+                <a href="/" class="btn btn-light">Home</a>
+                <a href="/dashboard" class="btn btn-light">Dashboard</a>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <div class="container mt-5">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="card shadow p-4">
+                        <h2 class="text-center text-danger mb-3">
+                            {% if ambulance_request %}Request Ambulance{% else %}Send Emergency Request{% endif %}
+                        </h2>
+                        <p class="text-center text-muted mb-4">
+                            {% if ambulance_request %}
+                            Share the patient's current location and medical emergency details so ambulance support can be arranged quickly.
+                            {% else %}
+                            SOS is accepted immediately. Verification is only for review and priority handling, not automatic rejection.
+                            {% endif %}
+                        </p>
+
+                        <form action="/sos" method="POST" enctype="multipart/form-data">
+                            {% if ambulance_request %}<input type="hidden" name="service_mode" value="ambulance">{% endif %}
+                            <div class="mb-3">
+                                <label class="form-label">Current Location (from GPS)</label>
+                                <input type="text" id="location" name="location" class="form-control" placeholder="Click Use My Current Location" readonly required>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">GPS Latitude</label>
+                                    <input type="text" id="gps_latitude" name="gps_latitude" class="form-control" placeholder="Use current location" readonly required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">GPS Longitude</label>
+                                    <input type="text" id="gps_longitude" name="gps_longitude" class="form-control" placeholder="Use current location" readonly required>
+                                </div>
+                            </div>
+
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <button type="button" id="get-location" class="btn btn-outline-primary">
+                                    Use My Current Location
+                                </button>
+                                <span id="location-status" class="small text-muted" role="status">
+                                    GPS is required so the location can be verified.
+                                </span>
+                            </div>
+
+                            {% if ambulance_request %}
+                            <div id="ambulance-results" class="alert alert-info d-none mb-3">
+                                <strong>Ambulances near your current location</strong>
+                                <p class="small mb-2">Nearby ambulance locations are sorted by distance from your GPS position. Select one to send with your request; the response team will confirm live availability.</p>
+                                <div id="ambulance-location" class="small text-muted mb-2"></div>
+                                <div id="ambulance-list"></div>
+                                <div id="ambulance-contact" class="mt-2"></div>
+                                <input type="hidden" id="ambulance-name" name="ambulance_name">
+                                <input type="hidden" id="ambulance-distance" name="ambulance_distance">
+                            </div>
+                            {% endif %}
+
+                            {% if error_message %}
+                            <div class="alert alert-danger" role="alert">{{ error_message }}</div>
+                            {% endif %}
+
+                            <div class="mb-3">
+                                <label class="form-label">Emergency Date</label>
+                                <input
+                                    type="date"
+                                    name="emergency_datetime"
+                                    class="form-control"
+                                    min="{{ today_date }}"
+                                    value="{{ selected_emergency_date or '' }}"
+                                    required
+                                >
+                            </div>
+
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" name="citizen_confirmation" value="confirmed" id="citizen-confirmation" required>
+                                <label class="form-check-label small" for="citizen-confirmation">
+                                    I confirm that this emergency request and the information provided are true to the best of my knowledge.
+                                </label>
+                            </div>
+
+                            <div class="alert alert-warning small mb-3">
+                                <strong>Note:</strong> GPS confirms your location, not whether an incident happened. The response team may call you and verify the request before dispatch.
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" id="submit-sos" class="btn btn-danger btn-lg" disabled>🚨 Send SOS Request</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+
+
+
+
+
+
+
+</main>
+
+<footer class="bg-dark text-white text-center py-4">
+<h5>Smart Emergency & Citizen Service Portal</h5>
+<p>© 2026 All Rights Reserved.</p>
+</footer>
+
+</body>
+
+<script>
+    const locationButton = document.getElementById("get-location");
+    const locationStatus = document.getElementById("location-status");
+    const locationInput = document.getElementById("location");
+    const latitudeInput = document.getElementById("gps_latitude");
+    const longitudeInput = document.getElementById("gps_longitude");
+    const submitButton = document.getElementById("submit-sos");
+    const sosForm = document.querySelector("form[action='/sos']");
+    const ambulanceRequest = document.body.dataset.ambulanceRequest === "true";
+    const ambulanceResults = document.getElementById("ambulance-results");
+    const ambulanceList = document.getElementById("ambulance-list");
+    const ambulanceLocation = document.getElementById("ambulance-location");
+    const ambulanceContact = document.getElementById("ambulance-contact");
+    const ambulanceNameInput = document.getElementById("ambulance-name");
+    const ambulanceDistanceInput = document.getElementById("ambulance-distance");
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+            "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+        })[character]);
+    }
+
+    function distanceInMeters(firstLatitude, firstLongitude, secondLatitude, secondLongitude) {
+        const earthRadius = 6371000;
+        const latitudeDelta = (secondLatitude - firstLatitude) * Math.PI / 180;
+        const longitudeDelta = (secondLongitude - firstLongitude) * Math.PI / 180;
+        const value = Math.sin(latitudeDelta / 2) ** 2 + Math.cos(firstLatitude * Math.PI / 180) * Math.cos(secondLatitude * Math.PI / 180) * Math.sin(longitudeDelta / 2) ** 2;
+        return earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+    }
+
+    async function findNearbyAmbulances(latitude, longitude) {
+        if (!ambulanceRequest) return;
+        ambulanceResults.classList.remove("d-none");
+        ambulanceLocation.textContent = `Searching around ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+        ambulanceList.innerHTML = "<span>Finding nearby ambulance locations...</span>";
+        try {
+            const response = await fetch(`/api/nearby-ambulances?lat=${latitude}&lon=${longitude}&radius=100`);
+            if (!response.ok) throw new Error("Ambulance search failed");
+            const data = await response.json();
+            const ambulances = (data.elements || []).map((item) => {
+                const itemLatitude = item.lat || item.center?.lat;
+                const itemLongitude = item.lon || item.center?.lon;
+                return {
+                    ...item,
+                    lat: itemLatitude,
+                    lon: itemLongitude,
+                    distance: distanceInMeters(latitude, longitude, itemLatitude, itemLongitude)
+                };
+            }).filter((item) => item.lat && item.lon).sort((first, second) => first.distance - second.distance);
+            if (!ambulances.length) {
+                ambulanceList.innerHTML = "No mapped ambulance location found within 100 km.";
+                ambulanceContact.innerHTML = "<div class=\"alert alert-warning py-2 mb-0\">No nearby ambulance was found. Please complete the form and send the SOS request so the response team can arrange help.</div>";
+                return;
+            }
+            const nearestDistance = (ambulances[0].distance / 1000).toFixed(1);
+            const rangeMessage = ambulances[0].distance > 25000
+                ? `<div class="alert alert-warning py-2 mb-2">Mapped ambulance location found approximately <strong>${nearestDistance} km away</strong>. Live availability must be confirmed by phone or the response team.</div>`
+                : `<div class="small text-success mb-2">Mapped ambulance location found approximately <strong>${nearestDistance} km away</strong>.</div>`;
+            ambulanceList.innerHTML = ambulances.slice(0, 5).map((item, index) => {
+                const name = item.tags?.name || "Nearby ambulance service";
+                const distance = (item.distance / 1000).toFixed(1);
+                return `<button type="button" class="btn btn-sm ${index === 0 ? "btn-primary" : "btn-outline-primary"} ambulance-choice d-block w-100 text-start mb-2" data-name="${escapeHtml(name)}" data-distance="${distance}">🚑 ${escapeHtml(name)} <span class="float-end">${distance} km</span></button>`;
+            }).join("");
+            ambulanceList.insertAdjacentHTML("afterbegin", rangeMessage);
+            ambulanceList.querySelectorAll(".ambulance-choice").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const selectedAmbulance = ambulances.find((item) => (item.tags?.name || "Nearby ambulance service") === button.dataset.name && (item.distance / 1000).toFixed(1) === button.dataset.distance);
+                    const phone = selectedAmbulance?.tags?.phone || selectedAmbulance?.tags?.["contact:phone"] || "";
+                    const safePhone = String(phone).replace(/[^\d+]/g, "");
+                    ambulanceNameInput.value = button.dataset.name;
+                    ambulanceDistanceInput.value = button.dataset.distance;
+                    ambulanceList.querySelectorAll(".ambulance-choice").forEach((choice) => choice.classList.replace("btn-primary", "btn-outline-primary"));
+                    button.classList.replace("btn-outline-primary", "btn-primary");
+                    ambulanceContact.innerHTML = safePhone
+                        ? `<div class="alert alert-success py-2 mb-0">Contact number found for this ambulance location. <a class="btn btn-success btn-sm ms-2" href="tel:${safePhone}">Call Ambulance</a></div>`
+                        : "<div class=\"alert alert-warning py-2 mb-0\">No phone number is listed for this ambulance location. Please send the SOS request; the response team will arrange or confirm an ambulance.</div>";
+                });
+            });
+            ambulanceList.querySelector(".ambulance-choice")?.click();
+        } catch (error) {
+            ambulanceList.innerHTML = "Nearby ambulance search is unavailable right now. You can still send the emergency request.";
+            ambulanceContact.innerHTML = "<div class=\"alert alert-warning py-2 mb-0\">Please send the SOS request so the response team can arrange an ambulance.</div>";
+        }
+    }
+
+    function setLocationReady(latitude, longitude, address) {
+        latitudeInput.value = latitude.toFixed(8);
+        longitudeInput.value = longitude.toFixed(8);
+        locationInput.value = address || `GPS: ${latitude.toFixed(8)}, ${longitude.toFixed(8)}`;
+        submitButton.disabled = false;
+        locationStatus.textContent = "GPS and current location matched.";
+        locationStatus.className = "small text-success";
+        findNearbyAmbulances(latitude, longitude);
+    }
+
+    locationButton.addEventListener("click", () => {
+        if (!navigator.geolocation) {
+            locationStatus.textContent = "GPS is not supported by this browser.";
+            locationStatus.className = "small text-danger";
+            return;
+        }
+
+        locationButton.disabled = true;
+        locationStatus.textContent = "Getting your location...";
+        locationStatus.className = "small text-primary";
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const latitude = position.coords.latitude;
+                const longitude = position.coords.longitude;
+                const fallbackAddress = `GPS: ${latitude.toFixed(8)}, ${longitude.toFixed(8)}`;
+
+                fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`)
+                    .then((response) => response.ok ? response.json() : Promise.reject())
+                    .then((data) => setLocationReady(latitude, longitude, data.display_name || fallbackAddress))
+                    .catch(() => setLocationReady(latitude, longitude, fallbackAddress));
+
+                locationButton.disabled = false;
+            },
+            () => {
+                locationStatus.textContent = "Location unavailable. SOS cannot be submitted without GPS.";
+                locationStatus.className = "small text-warning";
+                locationButton.disabled = false;
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        );
+    });
+
+    sosForm.addEventListener("submit", (event) => {
+        if (!latitudeInput.value || !longitudeInput.value || !locationInput.value) {
+            event.preventDefault();
+            locationStatus.textContent = "Use My Current Location before submitting.";
+            locationStatus.className = "small text-danger";
+        }
+    });
+</script>
+
+</html>

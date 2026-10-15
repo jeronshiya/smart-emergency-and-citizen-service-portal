@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Emergency & Citizen Service Portal</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="portal-home">
+
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+    <div class="container">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="navbar-logo me-3">
+        <a class="navbar-brand fw-bold" href="/"> Smart Emergency</a>
+
+        <button class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#menu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="menu">
+            <ul class="navbar-nav ms-auto">
+
+                <li class="nav-item">
+                    <a class="nav-link active" href="/">Home</a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="/about">About</a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="/dashboard">Services</a>
+                </li>
+
+                <li class="nav-item">
+                    <a class="nav-link" href="/contact">Contact</a>
+                </li>
+
+                <li class="nav-item ms-2">
+                    <a class="btn btn-light" href="/login">Login</a>
+                </li>
+
+                <li class="nav-item ms-2">
+                    <a class="btn btn-warning" href="/admin-login">Admin Login</a>
+                </li>
+
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<!-- Hero -->
+<section class="bg-primary text-white text-center py-5">
+    <div class="container">
+
+        <h1 class="display-3 fw-bold">
+            Smart Emergency & Citizen Service Portal
+        </h1>
+
+        <p class="lead mt-3">
+            One platform for SOS, complaints, hospitals, police, fire service and citizen support.
+        </p>
+
+        <a href="/sos" class="btn btn-danger btn-lg mt-3">🚨 Send SOS</a>
+
+        <a href="/complaint" class="btn btn-outline-light btn-lg mt-3">
+            Register Complaint
+        </a>
+
+    </div>
+</section>
+
+<!-- Emergency -->
+<section class="container py-5">
+
+<h2 class="text-center mb-5">Emergency Services</h2>
+
+<div class="row g-4">
+
+<div class="col-md-3">
+<div class="card text-center shadow p-3">
+<h1>🚑</h1>
+<h4>Ambulance</h4>
+<p>Medical emergency support.</p>
+<a href="/sos" class="btn btn-primary">Request</a>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card text-center shadow p-3">
+<h1>🚓</h1>
+<h4>Police</h4>
+<p>Police assistance.</p>
+<a href="/sos" class="btn btn-primary">Request</a>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card text-center shadow p-3">
+<h1>🔥</h1>
+<h4>Fire</h4>
+<p>Fire rescue service.</p>
+<a href="/sos" class="btn btn-primary">Request</a>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card text-center shadow p-3">
+<h1>🩸</h1>
+<h4>Blood Bank</h4>
+<p>Find blood donors.</p>
+<a href="/nearby-blood-banks" class="btn btn-primary">Find Nearby Blood Banks</a>
+</div>
+</div>
+
+</div>
+
+</section>
+
+<!-- Citizen Services -->
+
+<section class="bg-light py-5">
+
+<div class="container">
+
+<h2 class="text-center mb-5">
+Citizen Services
+</h2>
+
+<div class="row">
+
+<div class="col-md-3">
+<a href="/complaint" class="card p-4 text-center text-decoration-none text-dark">
+📝
+<h5>Complaint</h5>
+</a>
+</div>
+
+<div class="col-md-3">
+<a href="/nearby-hospitals" class="card p-4 text-center text-decoration-none text-dark">
+📍
+<h5>Nearby Hospital</h5>
+<p class="mb-0">Find hospitals near you</p>
+</a>
+</div>
+
+<div class="col-md-3">
+<div class="card p-4 text-center">
+📢
+<h5>Alerts</h5>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card p-4 text-center">
+📋
+<h5>Status</h5>
+</div>
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- Statistics -->
+
+<section class="container py-5">
+
+<div class="row text-center">
+
+<div class="col-md-3">
+<h2>5000+</h2>
+<p>Citizens</p>
+</div>
+
+<div class="col-md-3">
+<h2>1200+</h2>
+<p>SOS Solved</p>
+</div>
+
+<div class="col-md-3">
+<h2>2500+</h2>
+<p>Complaints</p>
+</div>
+
+<div class="col-md-3">
+<h2>50+</h2>
+<p>Hospitals</p>
+</div>
+
+</div>
+
+</section>
+
+<!-- Footer -->
+
+<footer class="bg-dark text-white text-center py-4">
+
+<h5>Smart Emergency & Citizen Service Portal</h5>
+
+<p>© 2026 All Rights Reserved.</p>
+
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
